@@ -1,0 +1,295 @@
+
+  **************** Starts RealTime Project Now ****************
+================================================================[RealTime Project]
+##################
+
+:: use below URL as 'wikimedia' streaming ::
+	https://stream.wikimedia.org/v2/stream/recentchange
+
+================================================================
+ (Creating Maven Multi-Module Project)
+#############################################
+
+1. Create the Spring Starter Project with dependencies:
+	lombok, kafka
+2. Add below Tag at the end of <Parent> & above the <Properties> Tag
+	<packaging>pom</packaging>
+3. Refresh the Project and Make that Created Sub-Module as SpringBoot Project by add below code.
+
+@SpringBootApplication
+public class WikimediaApplication {
+
+  public static void main(String[] args){
+	SpringApplication.run(WikimediaApplication.class);
+  }
+}
+
+Run the 'WikimediaApplication' Application...
+
+================================================================
+****************************************************************
+
+> Create the Spring StarterProject with Name: 
+	Kafka-RealTime-Wikimedia-Project
+
+> Dep: lombok , kafka
+
+> add <packaing>pom</packaing> above the <properties> file
+
+> Refresh the Project
+
+> Click on the Project Name > New > Other > Maven Module > Next > Enter Module Name: Kafka-Producer-Wikimedia
+
+> Check the 'Create a simple project'
+> Next > Enter Name: KafkaProducerWikimedia
+> Enter Description : SpringBoot-Kafka-Project
+> Finish
+
+=> create the class under 'src/main/java' 
+
+@SpringBootApplication	
+public class KafkaProducerWikimedia {
+	public static void main(String[] args){
+		SpringApplication.run(KafkaProducerWikimedia.class);
+	}
+}
+
+> Run the 'KafkaProducerWikimedia' SpringBoot Application
+
+================================================================
+application.properties:
+-----------------------
+
+server.port=9090
+spring.kafka.producer.bootstrap-servers=localhost:9092
+
+spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+
+spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer
+
+KafkaTopicConfig.java:
+======================
+public class KafkaTopicConfig {
+   public NewTopic topic(){
+     return TopicBuilder.name("wikimedia_kafka").build();
+   }
+}
+
+> >> add okhttp eventsource dependency in child Module:
+
+<dependency>
+    <groupId>com.launchdarkly</groupId>
+    <artifactId>okhttp-eventsource</artifactId>
+    <version>2.5.0</version>
+</dependency>
+
+>> >>> >>>> similary add 'jackson-core' & 'jackson-databind' from fasterxml organization.
+
+WikimediaChangesHandler.java:
+=============================
+
+public class WikiMediaChangesHandler implements EventHandler{
+
+	private static final Logger LOG = LoggerFactory.getLogger(WikiMediaChangesHandler.class);
+	
+	private KafkaTemplate<String, String>kafkaTemplate;
+
+	private String topic;
+
+	public WikiMediaChangesHandler(KafkaTemplate<String, String> kafkaTemplate, String topic) {
+		super();
+		this.kafkaTemplate = kafkaTemplate;
+		this.topic = topic;
+	}
+
+	@Override
+	public void onOpen() throws Exception {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void onClosed() throws Exception {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void onMessage(String event, MessageEvent messageEvent) throws Exception {
+		LOG.info(String.format("event data => %s", messageEvent.getData()));
+		kafkaTemplate.send(topic, messageEvent.getData());
+	}
+
+	@Override
+	public void onComment(String comment) throws Exception {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void onError(Throwable t) {
+		// TODO Auto-generated method stub
+
+	}
+
+
+}
+
+
+KafkaProducer.java:
+===================
+
+@Service
+public class WikimediaProducer {
+
+	@Autowired
+	private KafkaTemplate<String, String>kafkaTemplate;
+	
+	public void sendMessage() {
+		String topic = "wikimedia_kafka";
+		
+		//To read real time stream data from wikimedia, we use event source
+		EventHandler eventHandler = new WikiMediaChangesHandler(kafkaTemplate, topic);
+		String url = "https://stream.wikimedia.org/v2/stream/recentchange";
+		EventSource.Builder builder = new EventSource.Builder(eventHandler, URI.create(url));
+		EventSource eventSource = builder.build();
+		eventSource.start();
+		
+		TimeUnit.MINUTES.sleep(10);
+		
+	}
+}
+
+==========================================================
+[Test and Run Wikimedia Producer]
+####################################
+
+@SpringBootApplication
+public class WikipediaProducerApplication implements CommandLineRunner{
+
+	public static void main(String[] args) {
+		SpringApplication.run(WikipediaProducerApplication.class);
+	}
+
+	@Autowired
+	private WikimediaProducer wikimediaProducer;
+
+	@Override
+	public void run(String... args) throws Exception {
+		wikimediaProducer.sendMessage();
+	}
+}
+
+>> >>> Lets close Zookeeper and KafkaServer Terminals and Restart then only Run the SpringBoot Child Module.
+
+=========================================================
+[Create Consumer Application]
+####################################
+
+> Click on the Project Name > New > Other > Maven Module > Next > Enter Module Name: Kafka-Producer-Wikimedia
+
+> Check the 'Create a simple project'
+> Next > Enter Name: KafkaConsumerDatabase
+> Enter Description : SpringBoot-Kafka-Project
+> Finish
+
+=> create the class under 'src/main/java' 
+
+@SpringBootApplication	
+public class KafkaConsumerApplication {
+	public static void main(String[] args){
+		SpringApplication.run(KafkaConsumerApplication.class);
+	}
+}
+
+> Run the 'KafkaConsumerApplication' SpringBoot Application
+
+
+application.properties:
+------------------------
+server.port=9090
+
+spring.kafka.consumer.bootstrap-servers=localhost:9092
+spring.kafka.consumer.group-id=group_id
+spring.kafka.consumer.auto-offset-reset=earliest
+
+spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+
+spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+
+=========================================================
+
+[Wikimedia Consumer]
+####################
+
+@Service
+public class KafkaDatabaseConsumer {
+
+	private static final Logger LOG = LoggerFactory.getLogger(KafkaDatabaseConsumer.class);
+	
+	@KafkaListener(topics = "wikimedia_kafka" , groupId = "myGroup")
+	public void consume(String eventMessage) {
+		LOG.info(String.format("Event Message Received -> %s" , eventMessage));
+	}
+}
+
+>> >>> >>>> Run the SB-App using Consumer Starter class
+
+=========================================================
+
+- Create the Entity class
+```````````````````````````
+@Entity
+@Data
+@Table(name = "WIKIMEDIA")
+public class WikimediaData {
+
+	@Id
+	@GeneratedValue(strategy =  GenerationType.IDENTITY)
+	private Long id;
+	
+	@Lob
+	private String wikiEventData;
+}
+
+
+- Create the Repository
+````````````````````````
+public interface WikimediaRepository extends JpaRepository<WikimediaData, Long> {
+
+}
+
+- Kafka Consumer class Code::
+=============================
+package com.swamy.consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Service;
+
+import com.swamy.entity.WikimediaData;
+import com.swamy.repository.WikimediaRepository;
+
+@Service
+public class KafkaDatabaseConsumer {
+
+	private static final Logger LOG = LoggerFactory.getLogger(KafkaDatabaseConsumer.class);
+	
+	@Autowired
+	private WikimediaRepository wikimediaRepository;
+	
+	@KafkaListener(topics = "wikimedia_kafka" , groupId = "myGroup")
+	public void consume(String eventMessage) {
+		LOG.info(String.format("Event Message Received -> %s" , eventMessage));
+		
+		WikimediaData wikimediaData = new WikimediaData();
+		wikimediaData.setWikiEventData(eventMessage);
+		
+		wikimediaRepository.save(wikimediaData);
+	}
+}
+
+
+================================================================
